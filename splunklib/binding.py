@@ -24,7 +24,8 @@ If you want a friendlier interface to the Splunk REST API, use the
 :mod:`splunklib.client` module.
 """
 
-import httplib
+# import httplib
+import http.client as httplib
 import logging
 import socket
 import ssl
@@ -33,13 +34,13 @@ import io
 
 from datetime import datetime
 from functools import wraps
-from StringIO import StringIO
+from io import StringIO
 
 from contextlib import contextmanager
 
 from xml.etree.ElementTree import XML
 
-from data import record
+from .data import record
 
 __all__ = [
     "AuthenticationError",
@@ -87,7 +88,7 @@ class UrlEncoded(str):
     It should be considered an SDK-private implementation detail.
 
     Manually tracking whether strings are URL encoded can be difficult. Avoid
-    calling ``urllib.quote`` to replace special characters with escapes. When
+    calling ``urllib.parse.quote`` to replace special characters with escapes. When
     you receive a URL-encoded string, *do* use ``urllib.unquote`` to replace
     escapes with single characters. Then, wrap any string you want to use as a
     URL in ``UrlEncoded``. Note that because the ``UrlEncoded`` class is
@@ -105,7 +106,7 @@ class UrlEncoded(str):
     **Example**::
 
         import urllib
-        UrlEncoded('%s://%s' % (scheme, urllib.quote(host)), skip_encode=True)
+        UrlEncoded('%s://%s' % (scheme, urllib.parse.quote(host)), skip_encode=True)
 
     If you append ``str`` strings and ``UrlEncoded`` strings, the result is also
     URL encoded.
@@ -117,17 +118,17 @@ class UrlEncoded(str):
     """
     def __new__(self, val='', skip_encode=False, encode_slash=False):
         if isinstance(val, UrlEncoded):
-            # Don't urllib.quote something already URL encoded.
+            # Don't urllib.parse.quote something already URL encoded.
             return val
         elif skip_encode:
             return str.__new__(self, val)
         elif encode_slash:
-            return str.__new__(self, urllib.quote_plus(val))
+            return str.__new__(self, urllib.parse.quote_plus(val))
         else:
             # When subclassing str, just call str's __new__ method
             # with your class and the value you want to have in the
             # new string.
-            return str.__new__(self, urllib.quote(val))
+            return str.__new__(self, urllib.parse.quote(val))
 
     def __add__(self, other):
         """self + other
@@ -138,7 +139,7 @@ class UrlEncoded(str):
         if isinstance(other, UrlEncoded):
             return UrlEncoded(str.__add__(self, other), skip_encode=True)
         else:
-            return UrlEncoded(str.__add__(self, urllib.quote(other)), skip_encode=True)
+            return UrlEncoded(str.__add__(self, urllib.parse.quote(other)), skip_encode=True)
 
     def __radd__(self, other):
         """other + self
@@ -149,7 +150,7 @@ class UrlEncoded(str):
         if isinstance(other, UrlEncoded):
             return UrlEncoded(str.__radd__(self, other), skip_encode=True)
         else:
-            return UrlEncoded(str.__add__(urllib.quote(other), self), skip_encode=True)
+            return UrlEncoded(str.__add__(urllib.parse.quote(other), self), skip_encode=True)
 
     def __mod__(self, fields):
         """Interpolation into ``UrlEncoded``s is disabled.
@@ -938,18 +939,18 @@ class AuthenticationError(HTTPError):
 # 'foo=1&foo=2&foo=3'.
 def _encode(**kwargs):
     items = []
-    for key, value in kwargs.iteritems():
+    for key, value in kwargs.items():
         if isinstance(value, list):
             items.extend([(key, item) for item in value])
         else:
             items.append((key, value))
-    return urllib.urlencode(items)
+    return urllib.parse.urlencode(items)
 
 # Crack the given url into (scheme, host, port, path)
 def _spliturl(url):
-    scheme, opaque = urllib.splittype(url)
-    netloc, path = urllib.splithost(opaque)
-    host, port = urllib.splitport(netloc)
+    scheme, opaque = urllib.request.splittype(url)
+    netloc, path = urllib.request.splithost(opaque)
+    host, port = urllib.request.splitport(netloc)
     # Strip brackets if its an IPv6 address
     if host.startswith('[') and host.endswith(']'): host = host[1:-1]
     if port is None: port = DEFAULT_PORT
@@ -1124,7 +1125,7 @@ class ResponseReader(io.RawIOBase):
     # will work equally well.
     def __init__(self, response):
         self._response = response
-        self._buffer = ''
+        self._buffer = bytes()
 
     def __str__(self):
         return self.read()
@@ -1160,10 +1161,11 @@ class ResponseReader(io.RawIOBase):
 
         """
         r = self._buffer
-        self._buffer = ''
+        self._buffer = bytes()
         if size is not None:
             size -= len(r)
         r = r + self._response.read(size)
+        #raise RuntimeError
         return r
 
     def readable(self):

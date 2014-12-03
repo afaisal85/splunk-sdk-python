@@ -45,7 +45,7 @@ except:
 try:
     from cStringIO import StringIO
 except:
-    from StringIO import StringIO
+    from io import StringIO
 
 __all__ = [
     "ResultsReader",
@@ -193,13 +193,11 @@ class ResultsReader(object):
         # destroy the stream and throw an error. To get around this,
         # we remove all the DTD definitions inline, then wrap the
         # fragments in a fiction <doc> element to make the parser happy.
-        stream = _XMLDTDFilter(stream)
-        stream = _ConcatenatedStream(StringIO("<doc>"), stream, StringIO("</doc>"))
         self.is_preview = None
-        self._gen = self._parse_results(stream)
+        self._gen = iter(self._parse_results(stream))
 
     def __iter__(self):
-        return self
+        return self._gen
 
     def next(self):
         return self._gen.next()

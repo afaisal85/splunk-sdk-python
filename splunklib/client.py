@@ -67,9 +67,8 @@ from datetime import datetime, timedelta
 import socket
 import contextlib
 
-from binding import Context, HTTPError, AuthenticationError, namespace, UrlEncoded, _encode
-from data import record
-import data
+from .binding import Context, HTTPError, AuthenticationError, namespace, UrlEncoded, _encode
+from .data import record, load
 
 __all__ = [
     "connect",
@@ -182,7 +181,7 @@ def _trailing(template, *targets):
 def _filter_content(content, *args):
     if len(args) > 0:
         return record((k, content[k]) for k in args)
-    return record((k, v) for k, v in content.iteritems()
+    return record((k, v) for k, v in content.items()
         if k not in ['eai:acl', 'eai:attributes', 'type'])
 
 # Construct a resource path from the given base path + resource name
@@ -193,7 +192,7 @@ def _path(base, name):
 
 # Load an atom record from the body of the given response
 def _load_atom(response, match=None):
-    return data.load(response.body.read(), match)
+    return load(response.body.read(), match)
 
 
 # Load an array of atom entries from the body of the given response
@@ -236,7 +235,7 @@ def _parse_atom_entry(entry):
     metadata = _parse_atom_metadata(content)
 
     # Filter some of the noise out of the content record
-    content = record((k, v) for k, v in content.iteritems()
+    content = record((k, v) for k, v in content.items()
         if k not in ['eai:acl', 'eai:attributes', 'type'])
 
     return record({
@@ -521,7 +520,7 @@ class Service(_BaseService):
         # This message will be deleted once the server actually restarts.
         self.messages.create(name="restart_required", **msg)
         result = self.post("server/control/restart")
-        if timeout is None: 
+        if timeout is None:
             return result
         start = datetime.now()
         diff = timedelta(seconds=timeout)
@@ -530,9 +529,9 @@ class Service(_BaseService):
                 self.login()
                 if not self.restart_required:
                     return result
-            except Exception, e:
+            except Exception as e:
                 sleep(1)
-        raise Exception, "Operation time out."
+        raise Exception( "Operation time out.")
 
     @property
     def restart_required(self):
@@ -542,7 +541,7 @@ class Service(_BaseService):
 
         """
         response = self.get("messages").body.read()
-        messages = data.load(response)['feed']
+        messages = load(response)['feed']
         if 'entry' not in messages:
             result = False
         else:
@@ -1044,7 +1043,7 @@ class Entity(Endpoint):
         # text to be dispatched via HTTP. However, these links are already
         # URL encoded when they arrive, and we need to mark them as such.
         unquoted_links = dict([(k, UrlEncoded(v, skip_encode=True))
-                               for k,v in results['links'].iteritems()])
+                               for k,v in results['links'].items()])
         results['links'] = unquoted_links
         return results
 
@@ -1253,7 +1252,7 @@ class ReadOnlyCollection(Endpoint):
         # This has been factored out so that it can be easily
         # overloaded by Configurations, which has to switch its
         # entities' endpoints from its own properties/ to configs/.
-        raw_path = urllib.unquote(state.links.alternate)
+        raw_path = urllib.parse.unquote(state.links.alternate)
         if 'servicesNS/' in raw_path:
             return _trailing(raw_path, 'servicesNS/', '/', '/')
         elif 'services/' in raw_path:
@@ -1587,7 +1586,7 @@ class Collection(ReadOnlyCollection):
                 and ``status``
 
         Example:
-        
+
         import splunklib.client
             s = client.service(...)
             saved_searches = s.saved_searches
@@ -1610,7 +1609,7 @@ class Collection(ReadOnlyCollection):
         name = UrlEncoded(name, encode_slash=True)
         return super(Collection, self).get(name, owner, app, sharing, **query)
 
-    
+
 
 
 class ConfigurationFile(Collection):
@@ -1641,7 +1640,7 @@ class Configurations(Collection):
         # The superclass implementation is designed for collections that contain
         # entities. This collection (Configurations) contains collections
         # (ConfigurationFile).
-        # 
+        #
         # The configurations endpoint returns multiple entities when we ask for a single file.
         # This screws up the default implementation of __getitem__ from Collection, which thinks
         # that multiple entities means a name collision, so we have to override it here.
@@ -1705,9 +1704,9 @@ class Stanza(Entity):
     """This class contains a single configuration stanza."""
 
     def submit(self, stanza):
-        """Adds keys to the current configuration stanza as a 
+        """Adds keys to the current configuration stanza as a
         dictionary of key-value pairs.
-        
+
         :param stanza: A dictionary of key-value pairs for the stanza.
         :type stanza: ``dict``
         :return: The :class:`Stanza` object.
@@ -1790,7 +1789,7 @@ class StoragePasswords(Collection):
         storage_password = StoragePassword(self.service, self._entity_path(state), state=state, skip_refresh=True)
 
         return storage_password
-    
+
     def delete(self, username, realm=None):
         """Delete a storage password by username and/or realm.
 
@@ -1961,7 +1960,7 @@ class Index(Entity):
         :return: The :class:`Index`.
         """
         self.refresh()
-        
+
         tds = self['maxTotalDataSizeMB']
         ftp = self['frozenTimePeriodInSecs']
         was_disabled_initially = self.disabled
@@ -1980,10 +1979,10 @@ class Index(Entity):
             while self.content.totalEventCount != '0' and datetime.now() < start+diff:
                 sleep(1)
                 self.refresh()
-            
+
             if self.content.totalEventCount != '0':
-                raise OperationError, "Cleaning index %s took longer than %s seconds; timing out." %\
-                                      (self.name, timeout)
+                raise OperationError( "Cleaning index %s took longer than %s seconds; timing out." %\
+                                      (self.name, timeout))
         finally:
             # Restore original values
             self.update(maxTotalDataSizeMB=tds, frozenTimePeriodInSecs=ftp)
@@ -2461,7 +2460,7 @@ class Inputs(Collection):
             try:
                 path = UrlEncoded(path, skip_encode=True)
                 response = self.get(path, **kwargs)
-            except HTTPError, he:
+            except HTTPError as he:
                 if he.status == 404: # No inputs of this kind
                     return []
             entities = []
@@ -2473,7 +2472,7 @@ class Inputs(Collection):
                 # Unquote the URL, since all URL encoded in the SDK
                 # should be of type UrlEncoded, and all str should not
                 # be URL encoded.
-                path = urllib.unquote(state.links.alternate)
+                path = urllib.parse.unquote(state.links.alternate)
                 entity = Input(self.service, path, kind, state=state)
                 entities.append(entity)
             return entities
@@ -2499,7 +2498,7 @@ class Inputs(Collection):
                 # Unquote the URL, since all URL encoded in the SDK
                 # should be of type UrlEncoded, and all str should not
                 # be URL encoded.
-                path = urllib.unquote(state.links.alternate)
+                path = urllib.parse.unquote(state.links.alternate)
                 entity = Input(self.service, path, kind, state=state)
                 entities.append(entity)
         if 'offset' in kwargs:
@@ -2925,7 +2924,7 @@ class Jobs(Collection):
             raise TypeError("Cannot specify an exec_mode to export.")
         params['segmentation'] = params.get('segmentation', 'none')
         return self.post(path_segment="export",
-                         search=query, 
+                         search=query,
                          **params).body
 
     def itemmeta(self):
@@ -2988,7 +2987,7 @@ class Jobs(Collection):
             raise TypeError("Cannot specify an exec_mode to oneshot.")
         params['segmentation'] = params.get('segmentation', 'none')
         return self.post(search=query,
-                         exec_mode="oneshot", 
+                         exec_mode="oneshot",
                          **params).body
 
 
@@ -3326,7 +3325,7 @@ class Users(Collection):
         state = _parse_atom_entry(entry)
         entity = self.item(
             self.service,
-            urllib.unquote(state.links.alternate),
+            urllib.parse.unquote(state.links.alternate),
             state=state)
         return entity
 
@@ -3449,7 +3448,7 @@ class Roles(Collection):
         state = _parse_atom_entry(entry)
         entity = self.item(
             self.service,
-            urllib.unquote(state.links.alternate),
+            urllib.parse.unquote(state.links.alternate),
             state=state)
         return entity
 
