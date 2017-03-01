@@ -167,7 +167,7 @@ class MessagesHeader(object):
     def __init__(self):
         self._messages = []
 
-    def __iadd__(self, (message_level, message_text)):
+    def __iadd__(self, message_level, message_text):
         self._messages.append((message_level, message_text))
         return self
 
